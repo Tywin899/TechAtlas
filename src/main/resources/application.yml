@@ -1,0 +1,24 @@
+spring:
+  application:
+    name: techatlas
+  profiles:
+    active: local
+
+server:
+  port: 8080
+
+logging:
+  level:
+    root: INFO
+    com.techatlas: INFO
+    org.springframework: INFO
+    org.hibernate.SQL: WARN
+    org.flywaydb: INFO
+
+springdoc:
+  api-docs:
+    path: /api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+    operationsSorter: alpha
+    tagsSorter: alpha

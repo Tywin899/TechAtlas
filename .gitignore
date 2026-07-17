@@ -1,0 +1,46 @@
+# =========================
+# Build output
+# =========================
+target/
+*.class
+
+# =========================
+# IDEs
+# =========================
+.idea/
+.vscode/
+.project
+.classpath
+.settings/
+
+# =========================
+# OS files
+# =========================
+.DS_Store
+Thumbs.db
+
+# Local Spring configuration
+src/main/resources/application-local.yml
+
+
+# =========================
+# Logs
+# =========================
+*.log
+
+# =========================
+# Environment files
+# =========================
+.env
+.env.*
+
+# =========================
+# Maven
+# =========================
+.mvn/timing.properties
+
+# =========================
+# IntelliJ
+# =========================
+*.iml
+

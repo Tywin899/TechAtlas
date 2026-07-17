@@ -191,6 +191,51 @@ Project documentation is available in the `docs/` directory.
 
 ---
 
+## 🛠️ Getting Started (Phase 1 Setup)
+
+### Prerequisites
+- **Java 21**
+- **Maven 3.9+**
+- **Docker & Docker Compose**
+
+### Running the Application
+
+1. **Start the database container**:
+   ```bash
+   docker compose up -d
+   ```
+   This launches a PostgreSQL 16 container bound to local port `5432` with user `techatlas` and database `techatlas`.
+
+## Local Setup
+
+Create a file:
+
+src/main/resources/application-local.yml
+
+using:
+
+src/main/resources/application-local.example.yml
+
+and configure your local PostgreSQL credentials.
+
+2. **Build the application**:
+   ```bash
+   mvn clean install
+   ```
+   This will verify compilation, run the checkstyle/validation plugins (if configured), and execute unit/integration tests with an in-memory database profile.
+
+3. **Run the application**:
+   ```bash
+   mvn spring-boot:run -Dspring-boot.run.profiles=local
+   ```
+   This runs the application using the `local` profile, connecting it to the Docker PostgreSQL database.
+
+### Verifying endpoints
+- **Swagger UI**: Accessible at `http://localhost:8080/swagger-ui.html`
+- **Health Check**: `GET http://localhost:8080/api/v1/health` (should return `{"status": "UP"}`)
+
+---
+
 ## 🤝 Contributing
 
 Contributions, discussions, and suggestions are welcome. If you'd like to improve the project, feel free to open an issue or submit a pull request.
