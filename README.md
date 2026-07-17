@@ -197,6 +197,4 @@ Contributions, discussions, and suggestions are welcome. If you'd like to improv
 
 ---
 
-## 📄 License
 
-This project is released under the MIT License.
