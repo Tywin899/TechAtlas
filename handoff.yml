@@ -1,0 +1,216 @@
+project:
+  name: TechAtlas
+  tagline: "Discover Engineering. Faster."
+  type: Backend Engineering Knowledge Search Engine
+  status: Planning
+
+vision:
+  summary: >
+    TechAtlas is a backend-first search engine that aggregates engineering
+    content from multiple trusted sources into a unified search experience.
+    The focus is on implementing the core concepts behind modern search
+    engines, including indexing, ranking, retrieval, and scalable backend
+    architecture.
+
+goals:
+  - Build a custom search engine without Elasticsearch or Solr.
+  - Demonstrate Information Retrieval concepts.
+  - Build a production-quality Spring Boot backend.
+  - Keep the architecture modular and extensible.
+  - Support multiple content providers.
+
+non_goals:
+  - AI-powered semantic search (initially)
+  - Frontend development
+  - Distributed microservices
+  - Authentication and user accounts
+
+technology:
+  language: Java 21
+  build: Maven
+  framework: Spring Boot 3
+  database: PostgreSQL
+  migrations: Flyway
+  documentation: OpenAPI / Swagger
+  containerization: Docker
+  testing:
+    - JUnit 5
+    - Mockito
+
+architecture:
+  style: Modular Monolith
+
+modules:
+  - controller
+  - service
+  - fetcher
+  - parser
+  - index
+  - ranking
+  - autocomplete
+  - repository
+  - entity
+  - dto
+  - config
+  - util
+  - exception
+
+search_pipeline:
+  - Normalize query
+  - Tokenize
+  - Remove stop words
+  - Stem terms
+  - Lookup inverted index
+  - Generate candidate documents
+  - Rank with BM25
+  - Return paginated results
+
+indexing_pipeline:
+  - Fetch documents
+  - Parse content
+  - Persist documents
+  - Tokenize
+  - Remove stop words
+  - Stem terms
+  - Build inverted index
+  - Update BM25 statistics
+  - Build autocomplete trie
+
+content_sources:
+  phase_1:
+    - Wikipedia
+
+  phase_2:
+    - GitHub
+
+  phase_3:
+    - Reddit
+
+  phase_4:
+    - Stack Overflow
+
+core_entities:
+  Document:
+    fields:
+      - id
+      - title
+      - content
+      - url
+      - source
+      - metadata
+      - contentHash
+      - createdAt
+      - updatedAt
+
+future_entities:
+  - SearchQuery
+  - Source
+  - AnalyticsDaily
+
+api:
+  endpoints:
+    - GET /api/v1/search
+    - GET /api/v1/autocomplete
+    - GET /api/v1/documents/{id}
+    - POST /api/v1/index/update
+    - POST /api/v1/index/rebuild
+    - GET /api/v1/index/status
+    - GET /api/v1/health
+
+ranking:
+  algorithm: BM25
+
+indexing:
+  structure: Inverted Index
+  incremental_updates: true
+  duplicate_detection: contentHash
+
+autocomplete:
+  structure: Trie
+
+database:
+  source_of_truth: PostgreSQL
+
+coding_guidelines:
+  - Follow SOLID principles.
+  - Keep business logic in services.
+  - Controllers should only orchestrate requests.
+  - Use constructor injection.
+  - Avoid static mutable state.
+  - Prefer composition over inheritance.
+  - Write unit tests for core algorithms.
+  - Keep modules loosely coupled.
+
+development_phases:
+
+  - name: Sprint 1
+    objective: Project setup
+    deliverables:
+      - Spring Boot application
+      - PostgreSQL integration
+      - Flyway
+      - Docker Compose
+      - Swagger
+
+  - name: Sprint 2
+    objective: Persistence layer
+    deliverables:
+      - Document entity
+      - Repository layer
+      - Database migrations
+
+  - name: Sprint 3
+    objective: Wikipedia ingestion
+    deliverables:
+      - Fetcher
+      - Parser
+      - Store documents
+
+  - name: Sprint 4
+    objective: Search engine core
+    deliverables:
+      - Tokenizer
+      - Stemmer
+      - Inverted index
+      - BM25 ranking
+
+  - name: Sprint 5
+    objective: Search API
+    deliverables:
+      - Search endpoint
+      - Pagination
+      - Search DTOs
+
+  - name: Sprint 6
+    objective: Incremental indexing
+
+  - name: Sprint 7
+    objective: GitHub integration
+
+  - name: Sprint 8
+    objective: Redis caching
+
+  - name: Sprint 9
+    objective: Autocomplete
+
+  - name: Sprint 10
+    objective: Analytics
+
+acceptance_criteria:
+  - Project builds successfully.
+  - Clean package structure.
+  - Database migrations execute automatically.
+  - Documents can be fetched and stored.
+  - Search returns ranked results.
+  - APIs are documented with OpenAPI.
+  - Unit tests pass.
+  - Code follows clean architecture principles.
+
+future_enhancements:
+  - Semantic search
+  - Query suggestions
+  - Synonym expansion
+  - Source trust weighting
+  - Learning-to-rank
+  - Vector search
+  - Personalized ranking
