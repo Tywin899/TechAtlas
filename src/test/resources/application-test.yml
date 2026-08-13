@@ -13,3 +13,13 @@ spring:
 
   flyway:
     enabled: false
+
+sync:
+  scheduler:
+    enabled: false
+
+cache:
+  redis:
+    enabled: false
+
+

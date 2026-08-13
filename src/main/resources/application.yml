@@ -22,3 +22,71 @@ springdoc:
     path: /swagger-ui.html
     operationsSorter: alpha
     tagsSorter: alpha
+
+wikipedia:
+  base-url: https://en.wikipedia.org/api/rest_v1
+  timeout: 5000
+
+index:
+  stopwords:
+    - a
+    - an
+    - the
+    - of
+    - is
+    - are
+    - was
+    - were
+    - to
+    - for
+    - and
+    - or
+    - with
+  stemming: true
+  normalization: true
+
+search:
+  bm25:
+    k1: 1.2
+    b: 0.75
+  pagination:
+    default-size: 10
+    max-size: 100
+
+github:
+  api-url: https://api.github.com
+  token: ${GITHUB_TOKEN:}
+  timeout: 5000
+
+stackoverflow:
+  api-url: https://api.stackexchange.com/2.3
+  site: stackoverflow
+  timeout: 5000
+  default-page-size: 30
+  max-page-size: 100
+  max-answers-per-question: 1
+  api-key: ${STACKOVERFLOW_API_KEY:}
+
+sync:
+  scheduler:
+    enabled: true
+    fixed-delay-ms: 21600000
+    initial-delay-ms: 30000
+    wikipedia:
+      enabled: true
+    github:
+      enabled: true
+    stackoverflow:
+      enabled: true
+
+cache:
+  redis:
+    enabled: true
+    host: localhost
+    port: 6379
+    search:
+      ttl-seconds: 300
+    document:
+      ttl-seconds: 600
+
+

@@ -1,6 +1,5 @@
 package com.techatlas.dto;
 
-import com.techatlas.entity.DocumentStatus;
 import com.techatlas.entity.SourceType;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -31,9 +30,6 @@ public record UpdateDocumentRequest(
 
     @Size(max = 50, message = "Language must not exceed 50 characters")
     String language,
-
-    @NotNull(message = "Status is required")
-    DocumentStatus status,
 
     String metadata
 ) {}

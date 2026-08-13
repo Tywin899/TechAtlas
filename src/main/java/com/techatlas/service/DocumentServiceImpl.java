@@ -7,12 +7,18 @@ import com.techatlas.entity.Document;
 import com.techatlas.exception.DocumentNotFoundException;
 import com.techatlas.exception.DuplicateDocumentException;
 import com.techatlas.mapper.DocumentMapper;
+import com.techatlas.model.InvertedIndex;
+import com.techatlas.entity.DocumentStatus;
 import com.techatlas.repository.DocumentRepository;
 import com.techatlas.util.HashUtil;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.techatlas.cache.CacheService;
+import com.techatlas.config.RedisCacheProperties;
+import java.util.concurrent.TimeUnit;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -22,10 +28,21 @@ public class DocumentServiceImpl implements DocumentService {
 
     private final DocumentRepository documentRepository;
     private final DocumentMapper documentMapper;
+    private final InvertedIndex invertedIndex;
+    private final CacheService cacheService;
+    private final RedisCacheProperties redisCacheProperties;
 
-    public DocumentServiceImpl(DocumentRepository documentRepository, DocumentMapper documentMapper) {
+    public DocumentServiceImpl(
+            DocumentRepository documentRepository,
+            DocumentMapper documentMapper,
+            InvertedIndex invertedIndex,
+            CacheService cacheService,
+            RedisCacheProperties redisCacheProperties) {
         this.documentRepository = documentRepository;
         this.documentMapper = documentMapper;
+        this.invertedIndex = invertedIndex;
+        this.cacheService = cacheService;
+        this.redisCacheProperties = redisCacheProperties;
     }
 
     @Override
@@ -37,15 +54,25 @@ public class DocumentServiceImpl implements DocumentService {
         }
 
         Document document = documentMapper.toEntity(request);
-        Document saved = documentRepository.save(document);
+        Document saved = documentRepository.saveAndFlush(document);
+        cacheService.clearAllSearchCaches();
         return documentMapper.toResponse(saved);
     }
 
     @Override
     public DocumentResponse retrieve(UUID id) {
+        String key = "document:" + id;
+        Optional<Object> cached = cacheService.get(key);
+        if (cached.isPresent()) {
+            cacheService.incrementDocumentHits();
+            return (DocumentResponse) cached.get();
+        }
+        cacheService.incrementDocumentMisses();
         Document document = documentRepository.findById(id)
                 .orElseThrow(() -> new DocumentNotFoundException("Document not found with ID: " + id));
-        return documentMapper.toResponse(document);
+        DocumentResponse response = documentMapper.toResponse(document);
+        cacheService.put(key, response, redisCacheProperties.getDocument().getTtlSeconds(), TimeUnit.SECONDS);
+        return response;
     }
 
     @Override
@@ -60,7 +87,15 @@ public class DocumentServiceImpl implements DocumentService {
         }
 
         documentMapper.updateEntityFromDto(request, document);
-        Document saved = documentRepository.save(document);
+        
+        // Reset status to PENDING_INDEX and remove from index to avoid stale data
+        document.setStatus(DocumentStatus.PENDING_INDEX);
+        document.setIndexedAt(null);
+        invertedIndex.removeDocument(id);
+
+        Document saved = documentRepository.saveAndFlush(document);
+        cacheService.evict("document:" + id);
+        cacheService.clearAllSearchCaches();
         return documentMapper.toResponse(saved);
     }
 
@@ -70,7 +105,10 @@ public class DocumentServiceImpl implements DocumentService {
         if (!documentRepository.existsById(id)) {
             throw new DocumentNotFoundException("Document not found with ID: " + id);
         }
+        invertedIndex.removeDocument(id);
         documentRepository.deleteById(id);
+        cacheService.evict("document:" + id);
+        cacheService.clearAllSearchCaches();
     }
 
     @Override
@@ -78,5 +116,27 @@ public class DocumentServiceImpl implements DocumentService {
         return documentRepository.findAll().stream()
                 .map(documentMapper::toResponse)
                 .collect(Collectors.toList());
+    }
+
+    @Override
+    public boolean existsByContentHash(String contentHash) {
+        return documentRepository.existsByContentHash(contentHash);
+    }
+
+    @Override
+    public Optional<DocumentResponse> findByContentHash(String contentHash) {
+        return documentRepository.findByContentHash(contentHash)
+                .map(documentMapper::toResponse);
+    }
+
+    @Override
+    @Transactional
+    public DocumentResponse updateStatus(UUID id, com.techatlas.entity.DocumentStatus status, java.time.LocalDateTime indexedAt) {
+        com.techatlas.entity.Document document = documentRepository.findById(id)
+                .orElseThrow(() -> new com.techatlas.exception.DocumentNotFoundException("Document not found with ID: " + id));
+        document.setStatus(status);
+        document.setIndexedAt(indexedAt);
+        com.techatlas.entity.Document saved = documentRepository.saveAndFlush(document);
+        return documentMapper.toResponse(saved);
     }
 }

@@ -63,40 +63,43 @@ Wikipedia documents are fetched and stored successfully.
 
 ---
 
-# Phase 4 – Search Engine Core
+# Phase 4 – Search Indexing Engine
 
-**Objective:** Build the indexing and retrieval engine.
+**Objective:** Build the indexing engine pipeline and in-memory structures.
 
 ### Tasks
 
-* Tokenizer
-* Stop-word removal
-* Stemmer
-* Inverted index
-* BM25 ranking
-* Candidate document generation
+* [x] Tokenizer splitting, Unicode, and punctuation removal
+* [x] TextNormalizer case, spacing, and numbers preservation
+* [x] Configurable Stop-word removal filter
+* [x] Porter Stemmer integration adapter
+* [x] In-memory Inverted Index with posting lists
+* [x] Ingestion pipeline service integration
+* [x] Index management REST endpoints
 
 **Deliverable**
 
-Documents can be searched using BM25 ranking.
+Documents can be tokenized, normalized, stemmed, and indexed into an in-memory inverted index.
 
 ---
 
-# Phase 5 – REST API
+# Phase 5 – REST Search API & Ranking
 
-**Objective:** Expose search functionality.
+**Objective:** Implement query processing, BM25 scoring, and expose search functionality via REST.
 
 ### Tasks
 
-* Search endpoint
-* Document endpoint
-* Pagination
-* Exception handling
-* OpenAPI documentation
+* [x] Query Processor mirroring document processing rules
+* [x] BM25 scoring calculation logic
+* [x] Score accumulation across multi-word queries
+* [x] REST search endpoint (`GET /api/v1/search`)
+* [x] Pagination logic and metadata responses
+* [x] Excerpt matching snippet generator
+* [x] Query parameters and boundary validations
 
 **Deliverable**
 
-Clients can search documents through REST endpoints.
+Clients can search documents, retrieve ranked results with BM25 scores, get matching text snippets, and navigate pages via the REST search API.
 
 ---
 
@@ -106,68 +109,135 @@ Clients can search documents through REST endpoints.
 
 ### Tasks
 
-* Compare content hashes
-* Detect document changes
-* Update only affected index entries
-* Support scheduled indexing
+* [x] Compare content hashes
+* [x] Detect document changes
+* [x] Update only affected index entries
+* [x] Support scheduled indexing (mechanisms prepared, scheduling deferred to Phase 11)
 
 **Deliverable**
 
-Efficient index updates without full rebuilds.
+* [x] Efficient index updates without full rebuilds.
 
 ---
 
-# Phase 7 – Additional Content Sources
+# Phase 7 – Intelligent Wikipedia Discovery
 
-**Objective:** Expand searchable content.
-
-### Planned Integrations
-
-* GitHub
-* Reddit
-* Stack Overflow
-
-**Deliverable**
-
-Multiple engineering knowledge sources searchable through a single API.
-
----
-
-# Phase 8 – Performance Improvements
-
-**Objective:** Improve speed and scalability.
+**Objective:** Controlled category-based Wikipedia crawling and traversal.
 
 ### Tasks
 
-* Redis caching
-* Database query optimization
-* Index optimization
-* Performance testing
+* [x] Category member discovery API client
+* [x] BFS category traversal up to maxDepth
+* [x] Bound crawler by maxArticles limits
+* [x] Visited category cycles protection
+* [x] Visited tracking persistence in PostgreSQL
+* [x] Bulk import via existing document pipeline
 
 **Deliverable**
 
-Reduced response times and improved throughput.
+* [x] Controlled category-based discovery and synchronization.
 
 ---
 
-# Phase 9 – Search Enhancements
+# Phase 8 – GitHub Ingestion
 
-**Objective:** Improve the search experience.
+**Objective:** Fetch, parse, and ingest GitHub repository READMEs and documents.
 
 ### Tasks
 
-* Trie-based autocomplete
-* Search suggestions
-* Query analytics
-* Trending searches
+* [x] Official GitHub API repository search integration
+* [x] GitHub API pagination and bounding
+* [x] README markdown contents extraction and Base64 decoding
+* [x] Persistent repository sync tracking table (`github_sync_repositories`)
+* [x] Category/Query propagation to imported Documents
+* [x] Reusing Phase 6 incremental indexing for repository updates
 
 **Deliverable**
 
-Enhanced search usability and analytics.
+* [x] Bounded, controlled repository-level discovery and synchronization.
 
 ---
 
-# Phase 10 – Future Enhancements
+# Phase 9 – Stack Overflow Ingestion
+
+**Objective:** Fetch, parse, and ingest Stack Overflow technical questions/answers.
+
+### Tasks
+
+* [x] Official Stack Exchange API questions search and answers retrieval
+* [x] Lightweight HTML-to-text body parsing and entity decoding
+* [x] Accepted and high-scoring answers sorting and consolidation
+* [x] Persistent question synchronization log (`stackoverflow_sync_questions`)
+* [x] Deduplication and incremental updates on question body changes
+
+**Deliverable**
+
+* [x] Bounded, controlled Stack Overflow discovery and ingestion.
+
+---
+
+# Phase 10 – Source Synchronization Engine
+
+**Objective:** Implement a generalized synchronization framework tracking revisions/hashes across Wikipedia, GitHub, and Stack Overflow.
+
+### Tasks
+
+* [x] Database migration mapping `source_sync` records with uniqueness bounds
+* [x] Abstract adapter interfaces decoupling generic orchestrators from source clients
+* [x] Change detection logic leveraging external revisions and hash fallback comparisons
+* [x] Document lifecycle integrations triggering incremental re-indexing on modifications
+* [x] REST endpoints for manual synchronizations and tracking statistics
+
+**Deliverable**
+
+* [x] Multi-source capable generalized synchronization engine.
+
+---
+
+# Phase 11 – Automated Scheduling
+
+**Objective:** Background task scheduling and periodic source synchronization.
+
+### Tasks
+
+* [x] Configurable background scheduler with custom initial/fixed delay bindings
+* [x] Concurrency guard preventing multiple overlapping synchronizations for the same source
+* [x] Failure isolation insuring one source failure does not affect other schedules
+* [x] Expose scheduler metadata via status API `/api/v1/sync/scheduler/status`
+
+**Deliverable**
+
+* [x] Autonomous background scheduling orchestration engine.
+
+---
+
+# Phase 12 – Performance Improvements
+
+**Objective:** Redis caching, query optimization, and performance scaling.
+
+### Tasks
+
+* [x] Integrated Redis container using Docker Compose configuration
+* [x] Formulated type-safe properties configuration with configurable TTL settings
+* [x] Created decoupled `CacheService` abstraction with transparent Redis failure fallback
+* [x] Configured Jackson JSON serialization for stable record data serialization
+* [x] Caching of document details with `document:{id}` eviction on updates
+* [x] Caching of query matches via SHA-256 canonical keys, invalidated on index changes
+* [x] Expose hits, misses, and evictions stats on `/api/v1/cache/status`
+
+**Deliverable**
+
+* [x] Fault-tolerant caching layer providing sub-millisecond search latencies.
+
+---
+
+# Phase 13 – Autocomplete & Search Suggestions
+
+**Objective:** Trie-based autocomplete suggestions.
+
+---
+
+# Phase 13 – Future Enhancements
 
 Potential improvements include:
 

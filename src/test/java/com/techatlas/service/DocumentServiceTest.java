@@ -9,6 +9,7 @@ import com.techatlas.entity.SourceType;
 import com.techatlas.exception.DocumentNotFoundException;
 import com.techatlas.exception.DuplicateDocumentException;
 import com.techatlas.mapper.DocumentMapper;
+import com.techatlas.model.InvertedIndex;
 import com.techatlas.repository.DocumentRepository;
 import com.techatlas.util.HashUtil;
 import org.junit.jupiter.api.BeforeEach;
@@ -33,7 +34,13 @@ class DocumentServiceTest {
     @Mock
     private DocumentRepository documentRepository;
 
+    @Mock
+    private InvertedIndex invertedIndex;
+
     private final DocumentMapper documentMapper = new DocumentMapper();
+
+    @Mock
+    private com.techatlas.cache.CacheService cacheService;
 
     private DocumentService documentService;
 
@@ -43,7 +50,13 @@ class DocumentServiceTest {
 
     @BeforeEach
     void setUp() {
-        documentService = new DocumentServiceImpl(documentRepository, documentMapper);
+        documentService = new DocumentServiceImpl(
+                documentRepository,
+                documentMapper,
+                invertedIndex,
+                cacheService,
+                new com.techatlas.config.RedisCacheProperties()
+        );
 
         createRequest = new CreateDocumentRequest(
                 "Doc Title",
@@ -64,7 +77,6 @@ class DocumentServiceTest {
                 "DevOps",
                 "Alice",
                 "en",
-                DocumentStatus.ACTIVE,
                 "{\"key\":\"value\"}"
         );
 
@@ -86,7 +98,7 @@ class DocumentServiceTest {
     void testCreateSuccess() {
         String expectedHash = HashUtil.calculateSha256(createRequest.content());
         when(documentRepository.existsByContentHash(expectedHash)).thenReturn(false);
-        when(documentRepository.save(any(Document.class))).thenAnswer(invocation -> {
+        when(documentRepository.saveAndFlush(any(Document.class))).thenAnswer(invocation -> {
             Document doc = invocation.getArgument(0);
             doc.setId(UUID.randomUUID());
             return doc;
@@ -99,7 +111,7 @@ class DocumentServiceTest {
         assertEquals(createRequest.title(), response.title());
         assertEquals(expectedHash, response.contentHash());
         assertEquals(DocumentStatus.PENDING_INDEX, response.status());
-        verify(documentRepository, times(1)).save(any(Document.class));
+        verify(documentRepository, times(1)).saveAndFlush(any(Document.class));
     }
 
     @Test
@@ -108,7 +120,7 @@ class DocumentServiceTest {
         when(documentRepository.existsByContentHash(expectedHash)).thenReturn(true);
 
         assertThrows(DuplicateDocumentException.class, () -> documentService.create(createRequest));
-        verify(documentRepository, never()).save(any(Document.class));
+        verify(documentRepository, never()).saveAndFlush(any(Document.class));
     }
 
     @Test
@@ -137,7 +149,7 @@ class DocumentServiceTest {
         String expectedHash = HashUtil.calculateSha256(updateRequest.content());
         when(documentRepository.findById(id)).thenReturn(Optional.of(document));
         when(documentRepository.existsByContentHash(expectedHash)).thenReturn(false);
-        when(documentRepository.save(any(Document.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(documentRepository.saveAndFlush(any(Document.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         DocumentResponse response = documentService.update(id, updateRequest);
 
@@ -145,7 +157,8 @@ class DocumentServiceTest {
         assertEquals(updateRequest.title(), response.title());
         assertEquals(updateRequest.content(), response.content());
         assertEquals(expectedHash, response.contentHash());
-        assertEquals(DocumentStatus.ACTIVE, response.status());
+        assertEquals(DocumentStatus.PENDING_INDEX, response.status());
+        verify(invertedIndex, times(1)).removeDocument(id);
     }
 
     @Test
@@ -173,6 +186,7 @@ class DocumentServiceTest {
         doNothing().when(documentRepository).deleteById(id);
 
         assertDoesNotThrow(() -> documentService.delete(id));
+        verify(invertedIndex, times(1)).removeDocument(id);
         verify(documentRepository, times(1)).deleteById(id);
     }
 

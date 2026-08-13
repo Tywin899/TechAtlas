@@ -69,7 +69,6 @@ class DocumentControllerTest {
                 "DevOps",
                 "Alice",
                 "en",
-                DocumentStatus.ACTIVE,
                 "{\"key\":\"value\"}"
         );
 
@@ -177,7 +176,7 @@ class DocumentControllerTest {
                 updateRequest.author(),
                 updateRequest.language(),
                 "hash123-updated",
-                DocumentStatus.ACTIVE,
+                DocumentStatus.PENDING_INDEX,
                 LocalDateTime.now(),
                 LocalDateTime.now(),
                 null,
@@ -190,7 +189,7 @@ class DocumentControllerTest {
                         .content(objectMapper.writeValueAsString(updateRequest)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.title").value(updateRequest.title()))
-                .andExpect(jsonPath("$.status").value("ACTIVE"));
+                .andExpect(jsonPath("$.status").value("PENDING_INDEX"));
     }
 
     @Test

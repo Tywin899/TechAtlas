@@ -21,14 +21,14 @@ The project is built from scratch to demonstrate the core principles behind mode
 
 ---
 
-## 📚 Planned Content Sources
+## 📚 Content Sources
 
 | Source         | Status  |
 | -------------- | ------- |
-| Wikipedia      | Planned |
-| GitHub         | Planned |
+| Wikipedia      | Ingested |
+| GitHub         | Ingested |
 | Reddit         | Planned |
-| Stack Overflow | Planned |
+| Stack Overflow | Ingested |
 
 Each source is integrated through a common ingestion pipeline, making the system easy to extend without changing the search engine core.
 
@@ -271,6 +271,174 @@ The following endpoints manage documents:
 - **`DELETE /api/v1/documents/{id}`**: Deletes a specific document. Returns `204 No Content` or `404 Not Found`.
 
 All controllers return strictly JSON (never HTML). Bean Validation detects and rejects malformed requests, returning clean error messages via the unified global exception handler.
+
+---
+
+## 🌐 Phase 3: Wikipedia Ingestion Pipeline
+
+We have introduced a Wikipedia ingestion pipeline to import articles, convert them to the internal `Document` structure, and persist them.
+
+### High-Level Flow
+```
+Wikipedia REST API -> WikipediaClient -> WikipediaService -> WikipediaMapper -> CreateDocumentRequest -> DocumentService -> DocumentRepository -> PostgreSQL
+```
+
+### New Package Structure
+- **`com.techatlas.fetcher.wikipedia`**: Contains client communication classes.
+  - **`dto/`**: Contains Wikipedia summary API response records (`WikipediaPageSummary`) and controller request payload (`WikipediaImportRequest`).
+  - **`WikipediaClient`** (Interface) / **`WikipediaClientImpl`**: REST client using Spring Boot's modern `RestClient`.
+- **`com.techatlas.mapper`**: Contains mapping classes.
+  - **`WikipediaMapper`**: Translates `WikipediaPageSummary` DTOs into the internal `CreateDocumentRequest`, serializing pageID, revision ID, description, and thumbnail URL into a JSON metadata payload.
+- **`com.techatlas.service`**:
+  - **`WikipediaService`** (Interface) / **`WikipediaServiceImpl`**: Orchestrates client operations, checks for duplicate content hashes (using `DocumentService`), and saves the new documents.
+
+### Configuration
+External configuration variables are added under `wikipedia:` namespace in [application.yml](file:///c:/Users/Soham/Desktop/Gen-AI/TechAtlas/TechAtlas/src/main/resources/application.yml):
+```yaml
+wikipedia:
+  base-url: https://en.wikipedia.org/api/rest_v1
+  timeout: 5000
+```
+These properties are loaded at runtime by `WikipediaConfig` and applied during the building of the `RestClient` bean.
+
+### REST Endpoints
+- **`POST /api/v1/wikipedia/import`**: Expects `{"title": "<article-title>"}`. Fetches the page, maps and computes content hash, asserts duplicate checks, and saves the article. Returns `201 Created` or `409 Conflict`.
+- **`GET /api/v1/wikipedia/{title}`**: Fetches and returns raw Wikipedia article summary details without persisting them to database. Returns `200 OK`.
+
+---
+
+## 🗂️ Phase 4: Search Indexing Engine
+
+We have implemented an in-memory search indexing engine and text processing pipeline.
+
+### Pipeline Architecture
+```text
+Document Content
+       ↓
+Tokenizer (split whitespace, strip Unicode punctuation)
+       ↓
+TextNormalizer (lowercase, trim, collapse spaces)
+       ↓
+StopWordFilter (configurable stop words removal)
+       ↓
+PorterStemmerAdapter (Martin Porter's suffix stripping)
+       ↓
+Term Frequency Counter (document scope term counting)
+       ↓
+InvertedIndex (ConcurrentHashMap<String, PostingList>)
+```
+
+### Data Structures
+- **`Posting`**: Immutable Java record wrapping document UUID and term frequency.
+- **`PostingList`**: Wraps a thread-safe list of postings with utility to update a document's postings for clean re-indexing.
+- **`InvertedIndex`**: A Spring component containing the dictionary map and statistics.
+
+### REST Endpoints
+- **`POST /api/v1/index/rebuild`**: Rebuilds the inverted index by processing all stored non-deleted documents. Returns `200 OK`.
+- **`POST /api/v1/index/document/{id}`**: Indexes a specific document by its ID. Returns `200 OK`, `404 Not Found` if missing, or `500 Internal Server Error` if indexing fails.
+- **`GET /api/v1/index/status`**: Returns index statistics (indexed documents count, vocabulary size, unique terms count, and total postings count). Returns `200 OK`.
+- **`GET /api/v1/search`**: Searches indexed documents using BM25 ranking. Required parameter `q` (search query text). Optional parameters `page` (default 0) and `size` (default 10). Rejects empty or whitespace-only queries with `400 Bad Request`. Returns matched documents with relevance scores and snippets.
+
+---
+
+## 🌐 Phase 8: GitHub Ingestion Pipeline
+
+We have introduced a GitHub integration to discover repositories and fetch/decode README content for indexing.
+
+### Configuration
+External configurations are externalized under the `github:` namespace in [application.yml](file:///c:/Users/Soham/Desktop/Gen-AI/TechAtlas/TechAtlas/src/main/resources/application.yml):
+```yaml
+github:
+  api-url: https://api.github.com
+  token: ${GITHUB_TOKEN:}
+  timeout: 5000
+```
+Authentication can be configured locally or in CI environments by setting the `GITHUB_TOKEN` environment variable.
+
+### REST Endpoints
+- **`POST /api/v1/github/discover`**: Searches for repositories on GitHub based on query bounds and imports their markdown description and decoded README contents.
+- **`GET /api/v1/github/sync`**: Returns information about already synchronized GitHub repositories.
+
+---
+
+## 🌐 Phase 9: Stack Overflow Ingestion Pipeline
+
+We have introduced a Stack Overflow integration to discover Q&A content and fetch, clean, and format questions and answers for indexing.
+
+### Configuration
+External configurations are externalized under the `stackoverflow:` namespace in [application.yml](file:///c:/Users/Soham/Desktop/Gen-AI/TechAtlas/TechAtlas/src/main/resources/application.yml):
+```yaml
+stackoverflow:
+  api-url: https://api.stackexchange.com/2.3
+  site: stackoverflow
+  timeout: 5000
+  default-page-size: 30
+  max-page-size: 100
+  max-answers-per-question: 1
+  api-key: ${STACKOVERFLOW_API_KEY:}
+```
+An API key can be set in environment variables using `STACKOVERFLOW_API_KEY`.
+
+### REST Endpoints
+- **`POST /api/v1/stackoverflow/discover`**: Searches for questions on Stack Overflow based on query parameters and tag filters, then imports the question body and top answers.
+- **`GET /api/v1/stackoverflow/sync`**: Returns information about already synchronized Stack Overflow questions.
+
+---
+
+## 🔄 Phase 10: Source Synchronization Engine
+
+We have introduced a generalized synchronization engine to systematically compare tracked resources from any external source against their current version and update documents when changes are detected.
+
+### REST Endpoints
+- **`POST /api/v1/sync/{source}`**: Manually triggers synchronization for the selected source (`WIKIPEDIA`, `GITHUB`, `STACKOVERFLOW`). Returns statistics on resources checked, updated, skipped, or failed.
+- **`GET /api/v1/sync/status`**: Returns the synchronization status and tracking info for all synchronized resources. Can optionally be filtered by source query parameter: `GET /api/v1/sync/status?source=GITHUB`.
+
+---
+
+## ⏰ Phase 11: Automated Scheduling & Background Synchronization
+
+We have layered an autonomous Spring scheduled background synchronizer over the synchronization engine to fetch and refresh documents at configurable intervals.
+
+### Configuration
+External scheduler settings are managed under the `sync.scheduler` namespace in [application.yml](file:///c:/Users/Soham/Desktop/Gen-AI/TechAtlas/TechAtlas/src/main/resources/application.yml):
+```yaml
+sync:
+  scheduler:
+    enabled: true
+    fixed-delay-ms: 3600000
+    initial-delay-ms: 30000
+    wikipedia:
+      enabled: true
+    github:
+      enabled: true
+    stackoverflow:
+      enabled: true
+```
+
+- **`GET /api/v1/sync/scheduler/status`**: Returns operational scheduler state including configured sources, enabled state, current delay configurations, and lists of any currently executing source sync routines.
+
+---
+
+## ⚡ Phase 12: Redis Caching & Performance
+
+We have introduced a Redis performance cache layer using Lettuce client pools and explicit Jackson JSON serializers.
+
+### Configuration
+External caching parameters are defined under the `cache.redis` namespace in [application.yml](file:///c:/Users/Soham/Desktop/Gen-AI/TechAtlas/TechAtlas/src/main/resources/application.yml):
+```yaml
+cache:
+  redis:
+    enabled: true
+    host: localhost
+    port: 6379
+    search:
+      ttl-seconds: 300
+    document:
+      ttl-seconds: 600
+```
+
+### REST Endpoints
+- **`GET /api/v1/cache/status`**: Returns diagnostics info including whether caching is enabled/available, search hits/misses, document hits/misses, and eviction counters.
 
 ---
 

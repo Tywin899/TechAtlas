@@ -43,7 +43,6 @@ public class DocumentMapper {
         document.setAuthor(request.author());
         document.setLanguage(request.language());
         document.setMetadata(request.metadata());
-        document.setStatus(request.status());
         
         document.setContentHash(HashUtil.calculateSha256(request.content()));
     }
