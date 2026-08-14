@@ -18,4 +18,16 @@ public interface SourceSyncRecordRepository extends JpaRepository<SourceSyncReco
     List<SourceSyncRecord> findByDocumentId(UUID documentId);
     boolean existsBySourceAndExternalId(SourceType source, String externalId);
     long countBySource(SourceType source);
+
+    @org.springframework.data.jpa.repository.Query("SELECT " +
+           "MAX(s.lastCheckedAt) as lastCheckedAt, " +
+           "MAX(s.lastSyncedAt) as lastSyncedAt, " +
+           "COUNT(s) as totalChecked, " +
+           "SUM(CASE WHEN s.status = 'FAILED' THEN 1L ELSE 0L END) as failures, " +
+           "SUM(CASE WHEN s.status = 'CHANGED' THEN 1L ELSE 0L END) as changed, " +
+           "SUM(CASE WHEN s.status = 'SYNCED' THEN 1L ELSE 0L END) as synced, " +
+           "SUM(CASE WHEN s.status = 'SKIPPED' THEN 1L ELSE 0L END) as skipped " +
+           "FROM SourceSyncRecord s " +
+           "WHERE s.source = :source")
+    SyncHealthProjection getHealthStatsBySource(SourceType source);
 }

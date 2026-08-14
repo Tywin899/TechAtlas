@@ -10,4 +10,11 @@ public interface IndexService {
     void removeDocument(UUID id);
     void reindexDocument(UUID id);
     void indexPendingDocuments();
+
+    long getIndexingAttempts();
+    long getSuccessfulIndexOperations();
+    long getFailedIndexOperations();
+    double getAverageIndexLatencyMs();
+    long getRebuildOperations();
+    long getIndividualReindexOperations();
 }

@@ -62,10 +62,10 @@ public class DocumentServiceImpl implements DocumentService {
     @Override
     public DocumentResponse retrieve(UUID id) {
         String key = "document:" + id;
-        Optional<Object> cached = cacheService.get(key);
+        Optional<DocumentResponse> cached = cacheService.get(key, DocumentResponse.class);
         if (cached.isPresent()) {
             cacheService.incrementDocumentHits();
-            return (DocumentResponse) cached.get();
+            return cached.get();
         }
         cacheService.incrementDocumentMisses();
         Document document = documentRepository.findById(id)

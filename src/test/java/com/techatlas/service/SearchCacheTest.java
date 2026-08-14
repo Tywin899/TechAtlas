@@ -67,7 +67,7 @@ class SearchCacheTest {
         SearchRequest request = new SearchRequest("spring", 0, 10);
         SearchResponse cachedResponse = new SearchResponse("spring", 0L, Collections.emptyList(), 0, 10, 0);
 
-        when(cacheService.get(anyString())).thenReturn(Optional.of(cachedResponse));
+        when(cacheService.get(anyString(), eq(SearchResponse.class))).thenReturn(Optional.of(cachedResponse));
 
         SearchResponse result = searchService.search(request);
 
@@ -81,7 +81,7 @@ class SearchCacheTest {
         SearchRequest request = new SearchRequest("spring", 0, 10);
         SearchResponse expectedResponse = new SearchResponse("spring", 0L, Collections.emptyList(), 0, 10, 0);
 
-        when(cacheService.get(anyString())).thenReturn(Optional.empty());
+        when(cacheService.get(anyString(), eq(SearchResponse.class))).thenReturn(Optional.empty());
         when(queryProcessor.process("spring")).thenReturn(Collections.emptyList());
 
         SearchResponse result = searchService.search(request);

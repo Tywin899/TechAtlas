@@ -18,6 +18,7 @@ public class RedisCacheService implements CacheService {
 
     private final RedisTemplate<String, Object> redisTemplate;
     private final RedisCacheProperties properties;
+    private final com.fasterxml.jackson.databind.ObjectMapper objectMapper;
 
     private final AtomicLong searchHits = new AtomicLong(0);
     private final AtomicLong searchMisses = new AtomicLong(0);
@@ -26,8 +27,17 @@ public class RedisCacheService implements CacheService {
     private final AtomicLong evictions = new AtomicLong(0);
 
     public RedisCacheService(RedisTemplate<String, Object> redisTemplate, RedisCacheProperties properties) {
+        this(redisTemplate, properties, new com.fasterxml.jackson.databind.ObjectMapper()
+                .registerModule(new com.fasterxml.jackson.datatype.jsr310.JavaTimeModule()));
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public RedisCacheService(RedisTemplate<String, Object> redisTemplate,
+                             RedisCacheProperties properties,
+                             com.fasterxml.jackson.databind.ObjectMapper objectMapper) {
         this.redisTemplate = redisTemplate;
         this.properties = properties;
+        this.objectMapper = objectMapper;
     }
 
     @Override
@@ -63,6 +73,28 @@ public class RedisCacheService implements CacheService {
             return Optional.ofNullable(val);
         } catch (Exception e) {
             logger.error("Redis error during GET for key {}: {}", key, e.getMessage());
+            return Optional.empty();
+        }
+    }
+
+    @Override
+    public <T> Optional<T> get(String key, Class<T> type) {
+        if (!properties.isEnabled()) {
+            return Optional.empty();
+        }
+        try {
+            Object val = redisTemplate.opsForValue().get(key);
+            if (val == null) {
+                return Optional.empty();
+            }
+            if (type.isInstance(val)) {
+                return Optional.of(type.cast(val));
+            }
+            // Fallback for converting LinkedHashMap to concrete record/object classes
+            T converted = objectMapper.convertValue(val, type);
+            return Optional.of(converted);
+        } catch (Exception e) {
+            logger.error("Redis error during typed GET for key {} and type {}: {}", key, type.getName(), e.getMessage());
             return Optional.empty();
         }
     }

@@ -59,7 +59,7 @@ class DocumentCacheTest {
                 docId, "Title", "content", "http://url", SourceType.MANUAL, null, null, null, "hash", null, null, null, null, null
         );
 
-        when(cacheService.get("document:" + docId)).thenReturn(Optional.of(response));
+        when(cacheService.get("document:" + docId, DocumentResponse.class)).thenReturn(Optional.of(response));
 
         DocumentResponse result = documentService.retrieve(docId);
 
@@ -77,7 +77,7 @@ class DocumentCacheTest {
                 docId, "Title", "content", "http://url", SourceType.MANUAL, null, null, null, "hash", null, null, null, null, null
         );
 
-        when(cacheService.get("document:" + docId)).thenReturn(Optional.empty());
+        when(cacheService.get("document:" + docId, DocumentResponse.class)).thenReturn(Optional.empty());
         when(documentRepository.findById(docId)).thenReturn(Optional.of(document));
         when(documentMapper.toResponse(document)).thenReturn(response);
 

@@ -9,5 +9,6 @@ public record SchedulerStatusResponse(
     boolean enabled,
     Set<SourceType> runningSources,
     Map<SourceType, Boolean> configuredSources,
-    long intervalMs
+    long intervalMs,
+    long initialDelayMs
 ) {}

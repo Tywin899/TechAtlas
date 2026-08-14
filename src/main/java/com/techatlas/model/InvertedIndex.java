@@ -12,6 +12,15 @@ public class InvertedIndex {
     private final Map<String, PostingList> index = new ConcurrentHashMap<>();
     private final Set<UUID> indexedDocuments = ConcurrentHashMap.newKeySet();
     private final Map<UUID, Integer> documentLengths = new ConcurrentHashMap<>();
+    private final PrefixTrie prefixTrie;
+
+    public InvertedIndex() {
+        this.prefixTrie = new PrefixTrie();
+    }
+
+    public InvertedIndex(PrefixTrie prefixTrie) {
+        this.prefixTrie = prefixTrie;
+    }
 
     public synchronized void insert(String term, Posting posting) {
         if (term == null || term.isBlank() || posting == null) {
@@ -19,6 +28,7 @@ public class InvertedIndex {
         }
         index.computeIfAbsent(term, k -> new PostingList()).addPosting(posting);
         indexedDocuments.add(posting.documentId());
+        prefixTrie.insert(term);
     }
 
     public PostingList retrieve(String term) {
@@ -32,6 +42,7 @@ public class InvertedIndex {
         index.clear();
         indexedDocuments.clear();
         documentLengths.clear();
+        prefixTrie.clear();
     }
 
     public int getDocumentCount() {
@@ -50,7 +61,13 @@ public class InvertedIndex {
             for (PostingList postingList : index.values()) {
                 postingList.removePostingForDocument(documentId);
             }
-            index.entrySet().removeIf(entry -> entry.getValue().getPostings().isEmpty());
+            index.entrySet().removeIf(entry -> {
+                boolean empty = entry.getValue().getPostings().isEmpty();
+                if (empty) {
+                    prefixTrie.remove(entry.getKey());
+                }
+                return empty;
+            });
             documentLengths.remove(documentId);
         }
     }
@@ -82,5 +99,9 @@ public class InvertedIndex {
 
     public Map<String, PostingList> getIndex() {
         return Collections.unmodifiableMap(index);
+    }
+
+    public PrefixTrie getPrefixTrie() {
+        return prefixTrie;
     }
 }

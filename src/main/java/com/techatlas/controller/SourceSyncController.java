@@ -51,7 +51,8 @@ public class SourceSyncController {
                 schedulerProperties.isEnabled(),
                 sourceSyncService.getRunningSources(),
                 configuredSources,
-                schedulerProperties.getFixedDelayMs()
+                schedulerProperties.getFixedDelayMs(),
+                schedulerProperties.getInitialDelayMs()
         );
         return ResponseEntity.ok(response);
     }

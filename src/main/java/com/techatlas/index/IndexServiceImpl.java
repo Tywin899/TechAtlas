@@ -35,6 +35,13 @@ public class IndexServiceImpl implements IndexService {
     private final InvertedIndex invertedIndex;
     private final CacheService cacheService;
 
+    private final java.util.concurrent.atomic.AtomicLong indexingAttempts = new java.util.concurrent.atomic.AtomicLong(0);
+    private final java.util.concurrent.atomic.AtomicLong successfulIndexOperations = new java.util.concurrent.atomic.AtomicLong(0);
+    private final java.util.concurrent.atomic.AtomicLong failedIndexOperations = new java.util.concurrent.atomic.AtomicLong(0);
+    private final java.util.concurrent.atomic.AtomicLong totalIndexLatencyMs = new java.util.concurrent.atomic.AtomicLong(0);
+    private final java.util.concurrent.atomic.AtomicLong rebuildOperations = new java.util.concurrent.atomic.AtomicLong(0);
+    private final java.util.concurrent.atomic.AtomicLong individualReindexOperations = new java.util.concurrent.atomic.AtomicLong(0);
+
     public IndexServiceImpl(
             DocumentService documentService,
             Tokenizer tokenizer,
@@ -54,6 +61,8 @@ public class IndexServiceImpl implements IndexService {
 
     @Override
     public void indexDocument(UUID id) {
+        indexingAttempts.incrementAndGet();
+        long startTime = System.nanoTime();
         logger.info("Starting indexing for document ID: {}", id);
         DocumentResponse doc = documentService.retrieve(id); // Throws 404 if missing
 
@@ -64,6 +73,7 @@ public class IndexServiceImpl implements IndexService {
                 logger.warn("Document ID: {} has empty content. Skipping safely.", id);
                 documentService.updateStatus(id, DocumentStatus.ACTIVE, LocalDateTime.now());
                 cacheService.clearAllSearchCaches();
+                successfulIndexOperations.incrementAndGet();
                 return;
             }
 
@@ -96,9 +106,12 @@ public class IndexServiceImpl implements IndexService {
             documentService.updateStatus(id, DocumentStatus.ACTIVE, LocalDateTime.now());
             cacheService.clearAllSearchCaches();
             logger.info("Successfully indexed document ID: {}", id);
+            successfulIndexOperations.incrementAndGet();
         } catch (TechAtlasException e) {
+            failedIndexOperations.incrementAndGet();
             throw e;
         } catch (Exception e) {
+            failedIndexOperations.incrementAndGet();
             logger.error("Failed to index document ID: {}", id, e);
             try {
                 documentService.updateStatus(id, DocumentStatus.FAILED, null);
@@ -106,6 +119,10 @@ public class IndexServiceImpl implements IndexService {
                 logger.error("Failed to update status to FAILED for document ID: {}", id, updateEx);
             }
             throw new TechAtlasException(HttpStatus.INTERNAL_SERVER_ERROR, "Indexing failed for document ID: " + id, e);
+        } finally {
+            long durationNs = System.nanoTime() - startTime;
+            long durationMs = java.util.concurrent.TimeUnit.NANOSECONDS.toMillis(durationNs);
+            totalIndexLatencyMs.addAndGet(durationMs);
         }
     }
 
@@ -126,6 +143,7 @@ public class IndexServiceImpl implements IndexService {
 
     @Override
     public void rebuildIndex() {
+        rebuildOperations.incrementAndGet();
         logger.info("Starting complete index rebuild");
         invertedIndex.clear();
         List<DocumentResponse> documents = documentService.listAll();
@@ -157,6 +175,7 @@ public class IndexServiceImpl implements IndexService {
 
     @Override
     public void reindexDocument(UUID id) {
+        individualReindexOperations.incrementAndGet();
         logger.info("Reindexing document ID: {}", id);
         indexDocument(id);
     }
@@ -179,5 +198,39 @@ public class IndexServiceImpl implements IndexService {
             }
         }
         logger.info("Pending indexing completed. Success: {}, Failed: {}", successCount, failCount);
+    }
+
+    @Override
+    public long getIndexingAttempts() {
+        return indexingAttempts.get();
+    }
+
+    @Override
+    public long getSuccessfulIndexOperations() {
+        return successfulIndexOperations.get();
+    }
+
+    @Override
+    public long getFailedIndexOperations() {
+        return failedIndexOperations.get();
+    }
+
+    @Override
+    public double getAverageIndexLatencyMs() {
+        long attempts = indexingAttempts.get();
+        if (attempts == 0) {
+            return 0.0;
+        }
+        return (double) totalIndexLatencyMs.get() / attempts;
+    }
+
+    @Override
+    public long getRebuildOperations() {
+        return rebuildOperations.get();
+    }
+
+    @Override
+    public long getIndividualReindexOperations() {
+        return individualReindexOperations.get();
     }
 }

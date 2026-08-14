@@ -148,20 +148,20 @@ src/
 
 ## 🚀 Development Roadmap
 
-* [ ] Project setup
-* [ ] Database schema
-* [ ] Wikipedia integration
-* [ ] Document ingestion
-* [ ] Inverted index
-* [ ] BM25 ranking
-* [ ] Search API
-* [ ] Incremental indexing
-* [ ] GitHub integration
+* [x] Project setup
+* [x] Database schema
+* [x] Wikipedia integration
+* [x] Document ingestion
+* [x] Inverted index
+* [x] BM25 ranking
+* [x] Search API
+* [x] Incremental indexing
+* [x] GitHub integration
 * [ ] Reddit integration
-* [ ] Stack Overflow integration
-* [ ] Redis caching
-* [ ] Autocomplete
-* [ ] Analytics dashboard
+* [x] Stack Overflow integration
+* [x] Redis caching
+* [x] Autocomplete
+* [x] Analytics dashboard
 
 ---
 
@@ -437,8 +437,58 @@ cache:
       ttl-seconds: 600
 ```
 
-### REST Endpoints
 - **`GET /api/v1/cache/status`**: Returns diagnostics info including whether caching is enabled/available, search hits/misses, document hits/misses, and eviction counters.
+
+---
+
+## 🔍 Phase 13: Autocomplete & Search Suggestions
+
+We have added interactive search autocomplete term suggestions and popular query tracking.
+
+### Configuration
+Autocomplete configurations are defined under the `autocomplete` namespace in [application.yml](file:///c:/Users/Soham/Desktop/Gen-AI/TechAtlas/TechAtlas/src/main/resources/application.yml):
+```yaml
+autocomplete:
+  enabled: true
+  default-limit: 10
+  max-limit: 20
+  max-prefix-length: 50
+  popular-query:
+    enabled: true
+    max-size: 1000
+  recent-query:
+    enabled: true
+    max-size: 10
+```
+
+### REST Endpoints
+- **`GET /api/v1/search/suggestions?q={prefix}&limit={limit}`**: Returns prefix matching suggestions. If the query parameter `q` is empty/blank, returns recent and global popular queries.
+- **`GET /api/v1/autocomplete/status`**: Returns autocomplete status and diagnostics, including vocabulary size, request counts, tracked popular queries, and recent search query volumes.
+
+---
+
+## 📊 Phase 14: Analytics & Monitoring
+
+We have added database-backed persistent search analytics and live operational counters monitoring caching, document counts, indexing throughput, and synchronization schedules.
+
+### Configuration
+Analytics settings are defined under the `analytics` namespace in [application.yml](file:///c:/Users/Soham/Desktop/Gen-AI/TechAtlas/TechAtlas/src/main/resources/application.yml):
+```yaml
+analytics:
+  enabled: true
+  default-limit: 10
+  max-limit: 100
+```
+
+### REST Endpoints
+- **`GET /api/v1/analytics/overview`**: Returns a high-level system overview including search counts, latency averages, total corpus documents, vocabulary postings, cache hits/misses, and sync health.
+- **`GET /api/v1/analytics/search/top-queries?limit={limit}`**: Lists most frequently executed search terms.
+- **`GET /api/v1/analytics/search/zero-results?limit={limit}`**: Lists search queries that returned zero matches.
+- **`GET /api/v1/analytics/search/latency`**: Displays search processing time metrics (average, min, max) and percentiles ($50^{\text{th}}$, $90^{\text{th}}$, $95^{\text{th}}$, $99^{\text{th}}$).
+- **`GET /api/v1/analytics/documents`**: Groups total persisted documents by source type, status, and category.
+- **`GET /api/v1/analytics/index`**: Displays active, pending, and failed documents along with vocabulary sizes and term posting counts.
+- **`GET /api/v1/analytics/cache`**: Exposes hit ratios, misses, and Redis cache connectivity checks.
+- **`GET /api/v1/analytics/synchronization`**: Monitors checked, changed, and failed resources, and tracks run durations across synchronization sources.
 
 ---
 

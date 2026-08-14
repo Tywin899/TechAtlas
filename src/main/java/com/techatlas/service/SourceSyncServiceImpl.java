@@ -29,6 +29,9 @@ public class SourceSyncServiceImpl implements SourceSyncService {
     private final IndexService indexService;
     private final Map<SourceType, SourceSynchronizer> synchronizersMap;
     private final Set<SourceType> runningSources = java.util.concurrent.ConcurrentHashMap.newKeySet();
+    private final Map<SourceType, SourceSyncResponse> lastSyncRuns = new java.util.concurrent.ConcurrentHashMap<>();
+    private final Map<SourceType, Long> lastSyncDurations = new java.util.concurrent.ConcurrentHashMap<>();
+    private final Map<SourceType, String> lastSyncStatuses = new java.util.concurrent.ConcurrentHashMap<>();
 
     public SourceSyncServiceImpl(
             SourceSyncRecordRepository repository,
@@ -52,111 +55,121 @@ public class SourceSyncServiceImpl implements SourceSyncService {
         if (!runningSources.add(source)) {
             throw new IllegalStateException("Synchronization is already running for source: " + source);
         }
+        long startTime = System.nanoTime();
+        SourceSyncResponse response = null;
         try {
             SourceSynchronizer synchronizer = synchronizersMap.get(source);
             if (synchronizer == null) {
                 throw new IllegalArgumentException("No synchronizer registered for source: " + source);
             }
 
-        List<SourceSyncRecord> records = repository.findBySource(source);
+            List<SourceSyncRecord> records = repository.findBySource(source);
 
-        int checked = 0;
-        int newResources = 0;
-        int changedResources = 0;
-        int unchangedResources = 0;
-        int skippedResources = 0;
-        int failedResources = 0;
-        int createdDocuments = 0;
-        int updatedDocuments = 0;
-        int indexedDocuments = 0;
+            int checked = 0;
+            int newResources = 0;
+            int changedResources = 0;
+            int unchangedResources = 0;
+            int skippedResources = 0;
+            int failedResources = 0;
+            int createdDocuments = 0;
+            int updatedDocuments = 0;
+            int indexedDocuments = 0;
 
-        for (SourceSyncRecord record : records) {
-            checked++;
-            try {
-                String originalTitle = "";
-                if (record.getDocumentId() != null) {
-                    try {
-                        originalTitle = documentService.retrieve(record.getDocumentId()).title();
-                    } catch (Exception e) {
-                        logger.warn("Document ID [{}] not found for sync record [{}]: {}", record.getDocumentId(), record.getId(), e.getMessage());
-                    }
-                }
-
-                SourceResource resource = synchronizer.fetchResource(record.getExternalId(), originalTitle);
-                if (resource == null) {
-                    record.setStatus(SyncStatus.SKIPPED);
-                    record.setLastCheckedAt(LocalDateTime.now());
-                    repository.save(record);
-                    skippedResources++;
-                    continue;
-                }
-
-                String currentHash = HashUtil.calculateSha256(resource.content());
-
-                boolean changed;
-                if (resource.externalRevision() != null && record.getExternalRevision() != null) {
-                    changed = !resource.externalRevision().equals(record.getExternalRevision());
-                } else {
-                    changed = !currentHash.equals(record.getContentHash());
-                }
-
-                if (changed) {
+            for (SourceSyncRecord record : records) {
+                checked++;
+                try {
+                    String originalTitle = "";
                     if (record.getDocumentId() != null) {
-                        UpdateDocumentRequest updateRequest = new UpdateDocumentRequest(
-                                resource.title(),
-                                resource.content(),
-                                resource.url(),
-                                resource.source(),
-                                resource.category(),
-                                resource.author(),
-                                resource.language(),
-                                resource.metadata()
-                        );
-                        documentService.update(record.getDocumentId(), updateRequest);
-                        indexService.indexDocument(record.getDocumentId());
-                        updatedDocuments++;
-                        indexedDocuments++;
+                        try {
+                            originalTitle = documentService.retrieve(record.getDocumentId()).title();
+                        } catch (Exception e) {
+                            logger.warn("Document ID [{}] not found for sync record [{}]: {}", record.getDocumentId(), record.getId(), e.getMessage());
+                        }
                     }
-                    changedResources++;
 
-                    record.setExternalRevision(resource.externalRevision());
-                    record.setContentHash(currentHash);
-                    record.setStatus(SyncStatus.CHANGED);
+                    SourceResource resource = synchronizer.fetchResource(record.getExternalId(), originalTitle);
+                    if (resource == null) {
+                        record.setStatus(SyncStatus.SKIPPED);
+                        record.setLastCheckedAt(LocalDateTime.now());
+                        repository.save(record);
+                        skippedResources++;
+                        continue;
+                    }
+
+                    String currentHash = HashUtil.calculateSha256(resource.content());
+
+                    boolean changed;
+                    if (resource.externalRevision() != null && record.getExternalRevision() != null) {
+                        changed = !resource.externalRevision().equals(record.getExternalRevision());
+                    } else {
+                        changed = !currentHash.equals(record.getContentHash());
+                    }
+
+                    if (changed) {
+                        if (record.getDocumentId() != null) {
+                            UpdateDocumentRequest updateRequest = new UpdateDocumentRequest(
+                                    resource.title(),
+                                    resource.content(),
+                                    resource.url(),
+                                    resource.source(),
+                                    resource.category(),
+                                    resource.author(),
+                                    resource.language(),
+                                    resource.metadata()
+                            );
+                            documentService.update(record.getDocumentId(), updateRequest);
+                            indexService.indexDocument(record.getDocumentId());
+                            updatedDocuments++;
+                            indexedDocuments++;
+                        }
+                        changedResources++;
+
+                        record.setExternalRevision(resource.externalRevision());
+                        record.setContentHash(currentHash);
+                        record.setStatus(SyncStatus.CHANGED);
+                        record.setLastCheckedAt(LocalDateTime.now());
+                        record.setLastSyncedAt(LocalDateTime.now());
+                        record.setLastError(null);
+                    } else {
+                        unchangedResources++;
+                        record.setStatus(SyncStatus.SYNCED);
+                        record.setLastCheckedAt(LocalDateTime.now());
+                        record.setLastError(null);
+                    }
+
+                    repository.save(record);
+
+                } catch (Exception e) {
+                    logger.error("Failed to synchronize record [{}] for source [{}]: {}", record.getId(), source, e.getMessage());
+                    failedResources++;
+                    record.setStatus(SyncStatus.FAILED);
                     record.setLastCheckedAt(LocalDateTime.now());
-                    record.setLastSyncedAt(LocalDateTime.now());
-                    record.setLastError(null);
-                } else {
-                    unchangedResources++;
-                    record.setStatus(SyncStatus.SYNCED);
-                    record.setLastCheckedAt(LocalDateTime.now());
-                    record.setLastError(null);
+                    record.setLastError(e.getMessage());
+                    repository.save(record);
                 }
-
-                repository.save(record);
-
-            } catch (Exception e) {
-                logger.error("Failed to synchronize record [{}] for source [{}]: {}", record.getId(), source, e.getMessage());
-                failedResources++;
-                record.setStatus(SyncStatus.FAILED);
-                record.setLastCheckedAt(LocalDateTime.now());
-                record.setLastError(e.getMessage());
-                repository.save(record);
             }
-        }
 
-        return new SourceSyncResponse(
-                source,
-                checked,
-                newResources,
-                changedResources,
-                unchangedResources,
-                skippedResources,
-                failedResources,
-                createdDocuments,
-                updatedDocuments,
-                indexedDocuments
-        );
+            response = new SourceSyncResponse(
+                    source,
+                    checked,
+                    newResources,
+                    changedResources,
+                    unchangedResources,
+                    skippedResources,
+                    failedResources,
+                    createdDocuments,
+                    updatedDocuments,
+                    indexedDocuments
+            );
+            lastSyncRuns.put(source, response);
+            lastSyncStatuses.put(source, "SUCCESS");
+            return response;
+        } catch (Exception e) {
+            lastSyncStatuses.put(source, "FAILED");
+            throw e;
         } finally {
+            long durationMs = java.util.concurrent.TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startTime);
+            lastSyncDurations.put(source, durationMs);
             runningSources.remove(source);
         }
     }
@@ -216,5 +229,20 @@ public class SourceSyncServiceImpl implements SourceSyncService {
     @Override
     public Set<SourceType> getRunningSources() {
         return Collections.unmodifiableSet(runningSources);
+    }
+
+    @Override
+    public Map<SourceType, SourceSyncResponse> getLastSyncRuns() {
+        return Collections.unmodifiableMap(lastSyncRuns);
+    }
+
+    @Override
+    public Map<SourceType, Long> getLastSyncDurations() {
+        return Collections.unmodifiableMap(lastSyncDurations);
+    }
+
+    @Override
+    public Map<SourceType, String> getLastSyncStatuses() {
+        return Collections.unmodifiableMap(lastSyncStatuses);
     }
 }

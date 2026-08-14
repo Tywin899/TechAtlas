@@ -22,4 +22,22 @@ cache:
   redis:
     enabled: false
 
+autocomplete:
+  enabled: true
+  default-limit: 5
+  max-limit: 10
+  max-prefix-length: 50
+  popular-query:
+    enabled: true
+    max-size: 5
+  recent-query:
+    enabled: true
+    max-size: 5
+
+analytics:
+  enabled: true
+  default-limit: 5
+  max-limit: 10
+
+
 

@@ -504,14 +504,64 @@ Potential future enhancements include:
 
 ---
 
+# Autocomplete & Search Suggestions
+
+Phase 13 introduces prefix-based term and popular query suggestions to enhance user interaction.
+
+### 1. In-Memory Prefix Trie Structure
+Vocabulary dictionary terms are hosted in a thread-safe `PrefixTrie` (`ConcurrentHashMap` children maps, `volatile String` terminal fields).
+- **Time Complexity**:
+  - Insertion: $O(L)$, where $L$ is the length of the inserted term.
+  - Prefix Lookup: $O(P + M)$, where $P$ is the length of the prefix and $M$ is the number of node paths explored under the subtree.
+- **Space Complexity**: Bounded directly by the active vocabulary size in the `InvertedIndex`. No duplicate term strings are stored.
+
+### 2. Inverted Index Synchronization
+The `PrefixTrie` lifecycle is tightly hooked to the `InvertedIndex` mutations:
+- **Index/Re-index**: Terms are incrementally inserted via `PrefixTrie.insert(term)` during document indexing.
+- **Eviction/Deletion**: When a document is removed or updated, any terms whose total document frequency falls to zero are incrementally purged via `PrefixTrie.remove(term)`.
+- **Rebuild/Clear**: Complete index rebuilds invoke `PrefixTrie.clear()` before parsing, guaranteeing zero stale terms.
+
+### 3. Query Popularity & Recent Tracker
+Every successful search request is processed by `QueryTracker`:
+- **Redis Mode**: Increments sorted set metrics (`autocomplete:popular`) and left-pushes recent queries (`autocomplete:recent`) keeping it trimmed via `LTRIM`.
+- **In-Memory Fallback Mode**: If Redis is offline or disabled, it transparently records metrics in a local `ConcurrentHashMap` and a bounded `LinkedList` to prevent application crashes.
+
+### 4. Ranking Formula
+Returned autocomplete matches are sorted deterministically based on:
+1. **Corpus Frequency**: Cumulative term frequency resolved directly from `InvertedIndex.retrieve(term)` for `TERM` type, or popularity count from `QueryTracker` for `QUERY` type.
+2. **Lexical Ordering**: Alphabetical tie-breaker.
+3. **Type Tie-Breaker**: Sort `QUERY` suggestions before `TERM` suggestions.
+
+---
+
+# Analytics & Monitoring
+
+Phase 14 introduces a lightweight, production-oriented analytics and monitoring subsystem to provide visibility into search usage, document statistics, indexing operational counters, and sync scheduler health.
+
+### 1. Database Persistent Metrics
+- **Schema**: Performed via Flyway (`search_analytics`), capturing query string, normalized query string, timestamp, page size, result counts, latencies, cache status, and page offset.
+- **Projections**: Custom JPA projections (`QueryCountProjection`, `ZeroResultProjection`, `LatencyStatsProjection`, `SyncHealthProjection`, `SourceCountProjection`, `StatusCountProjection`, `CategoryCountProjection`) allow high-performance grouped query metrics calculations on H2/PostgreSQL.
+
+### 2. Runtime Dynamic Metrics
+- **Index Counters**: Thread-safe `AtomicLong` counters monitor index attempts, index successes, failures, and aggregate nano timing latencies.
+- **Sync Durations**: Tracks synchronization runs for Wikipedia, GitHub, and Stack Overflow, keeping duration metrics, status codes, and checked resource counts in memory.
+- **Redis Stats**: Hits, misses, and availability status details are compiled from the `CacheService`.
+
+### 3. Failure Isolation & Graceful Fallback
+- Analytics metrics logs are decoupled from search, indexing, and synchronization pipelines.
+- Exception handlers surround all analytics repository/Redis writes to log error warnings and proceed cleanly without interrupting the primary application flows or returning HTTP 500 errors to clients.
+
+---
+
 # Architecture Summary
 
 * **Architecture Style:** Modular Monolith
-* **Language:** Java 21
+* **Language:** Java 24
 * **Framework:** Spring Boot
 * **Database:** PostgreSQL
 * **Ranking Algorithm:** BM25
 * **Index Structure:** Inverted Index
 * **Autocomplete:** Trie
+* **Analytics Layer:** Search Analytics Table & Projections
 * **Documentation:** OpenAPI / Swagger
 * **Deployment:** Docker

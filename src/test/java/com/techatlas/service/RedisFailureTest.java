@@ -59,7 +59,7 @@ class RedisFailureTest {
                 docId, "Title", "content", "http://url", SourceType.MANUAL, null, null, null, "hash", null, null, null, null, null
         );
 
-        when(cacheService.get(anyString())).thenReturn(Optional.empty());
+        when(cacheService.get(anyString(), any())).thenReturn(Optional.empty());
         when(documentRepository.findById(docId)).thenReturn(Optional.of(document));
         when(documentMapper.toResponse(document)).thenReturn(response);
 
@@ -78,7 +78,7 @@ class RedisFailureTest {
     void testSearchWorksOnRedisFailure() {
         SearchRequest request = new SearchRequest("spring", 0, 10);
 
-        when(cacheService.get(anyString())).thenReturn(Optional.empty());
+        when(cacheService.get(anyString(), any())).thenReturn(Optional.empty());
         when(queryProcessor.process("spring")).thenReturn(Collections.emptyList());
 
         SearchProperties searchProperties = new SearchProperties();

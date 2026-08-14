@@ -18,4 +18,13 @@ public interface DocumentRepository extends JpaRepository<Document, UUID> {
     boolean existsByContentHash(String contentHash);
     List<Document> findByCategory(String category);
     List<Document> findByLanguage(String language);
+
+    @org.springframework.data.jpa.repository.Query("SELECT d.status as status, COUNT(d) as count FROM Document d GROUP BY d.status")
+    List<StatusCountProjection> countByStatus();
+
+    @org.springframework.data.jpa.repository.Query("SELECT d.source as source, COUNT(d) as count FROM Document d GROUP BY d.source")
+    List<SourceCountProjection> countBySource();
+
+    @org.springframework.data.jpa.repository.Query("SELECT d.category as category, COUNT(d) as count FROM Document d WHERE d.category IS NOT NULL GROUP BY d.category")
+    List<CategoryCountProjection> countByCategory();
 }

@@ -7,6 +7,7 @@ public interface CacheService {
     boolean isEnabled();
     boolean isAvailable();
     Optional<Object> get(String key);
+    <T> Optional<T> get(String key, Class<T> type);
     void put(String key, Object value, long ttl, TimeUnit unit);
     void evict(String key);
     void clearPattern(String pattern);

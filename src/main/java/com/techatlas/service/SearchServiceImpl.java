@@ -27,6 +27,8 @@ public class SearchServiceImpl implements SearchService {
     private final SearchProperties searchProperties;
     private final CacheService cacheService;
     private final RedisCacheProperties redisCacheProperties;
+    private final com.techatlas.autocomplete.QueryTracker queryTracker;
+    private final AnalyticsService analyticsService;
 
     public SearchServiceImpl(
             DocumentService documentService,
@@ -36,6 +38,32 @@ public class SearchServiceImpl implements SearchService {
             SearchProperties searchProperties,
             CacheService cacheService,
             RedisCacheProperties redisCacheProperties) {
+        this(documentService, queryProcessor, rankingEngine, porterStemmerAdapter, searchProperties, cacheService, redisCacheProperties, null, null);
+    }
+
+    public SearchServiceImpl(
+            DocumentService documentService,
+            QueryProcessor queryProcessor,
+            RankingEngine rankingEngine,
+            PorterStemmerAdapter porterStemmerAdapter,
+            SearchProperties searchProperties,
+            CacheService cacheService,
+            RedisCacheProperties redisCacheProperties,
+            com.techatlas.autocomplete.QueryTracker queryTracker) {
+        this(documentService, queryProcessor, rankingEngine, porterStemmerAdapter, searchProperties, cacheService, redisCacheProperties, queryTracker, null);
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public SearchServiceImpl(
+            DocumentService documentService,
+            QueryProcessor queryProcessor,
+            RankingEngine rankingEngine,
+            PorterStemmerAdapter porterStemmerAdapter,
+            SearchProperties searchProperties,
+            CacheService cacheService,
+            RedisCacheProperties redisCacheProperties,
+            com.techatlas.autocomplete.QueryTracker queryTracker,
+            AnalyticsService analyticsService) {
         this.documentService = documentService;
         this.queryProcessor = queryProcessor;
         this.rankingEngine = rankingEngine;
@@ -43,13 +71,20 @@ public class SearchServiceImpl implements SearchService {
         this.searchProperties = searchProperties;
         this.cacheService = cacheService;
         this.redisCacheProperties = redisCacheProperties;
+        this.queryTracker = queryTracker;
+        this.analyticsService = analyticsService;
     }
 
     @Override
     public SearchResponse search(SearchRequest request) {
+        long startTime = System.nanoTime();
         String query = request.query();
         if (query == null || query.trim().isEmpty()) {
             throw new IllegalArgumentException("Query parameter 'q' must not be empty");
+        }
+
+        if (queryTracker != null) {
+            queryTracker.trackQuery(query);
         }
 
         int defaultSize = searchProperties.getPagination().getDefaultSize();
@@ -69,65 +104,75 @@ public class SearchServiceImpl implements SearchService {
         String keyHash = HashUtil.calculateSha256(canonicalRequest);
         String cacheKey = "search:" + keyHash;
 
-        Optional<Object> cached = cacheService.get(cacheKey);
+        boolean servedFromCache = false;
+        SearchResponse response;
+
+        Optional<SearchResponse> cached = cacheService.get(cacheKey, SearchResponse.class);
         if (cached.isPresent()) {
             cacheService.incrementSearchHits();
-            return (SearchResponse) cached.get();
-        }
-        cacheService.incrementSearchMisses();
-
-        List<String> queryTerms = queryProcessor.process(query);
-        if (queryTerms.isEmpty()) {
-            SearchResponse emptyResponse = new SearchResponse(query, 0, Collections.emptyList(), page, size, 0);
-            cacheService.put(cacheKey, emptyResponse, redisCacheProperties.getSearch().getTtlSeconds(), TimeUnit.SECONDS);
-            return emptyResponse;
-        }
-
-        Map<UUID, Double> scores = rankingEngine.scoreDocuments(queryTerms);
-        if (scores.isEmpty()) {
-            return new SearchResponse(query, 0, Collections.emptyList(), page, size, 0);
-        }
-
-        List<Map.Entry<UUID, Double>> sortedEntries = scores.entrySet().stream()
-                .sorted(Map.Entry.<UUID, Double>comparingByValue().reversed())
-                .collect(Collectors.toList());
-
-        long totalResults = sortedEntries.size();
-        int totalPages = (int) Math.ceil((double) totalResults / size);
-
-        int startOffset = page * size;
-        SearchResponse response;
-        if (startOffset >= totalResults) {
-            response = new SearchResponse(query, totalResults, Collections.emptyList(), page, size, totalPages);
+            response = cached.get();
+            servedFromCache = true;
         } else {
-            int endOffset = Math.min(sortedEntries.size(), startOffset + size);
-            List<Map.Entry<UUID, Double>> pageEntries = sortedEntries.subList(startOffset, endOffset);
+            cacheService.incrementSearchMisses();
 
-            List<SearchResult> results = new ArrayList<>();
-            for (Map.Entry<UUID, Double> entry : pageEntries) {
-                UUID docId = entry.getKey();
-                double score = entry.getValue();
+            List<String> queryTerms = queryProcessor.process(query);
+            if (queryTerms.isEmpty()) {
+                response = new SearchResponse(query, 0, Collections.emptyList(), page, size, 0);
+                cacheService.put(cacheKey, response, redisCacheProperties.getSearch().getTtlSeconds(), TimeUnit.SECONDS);
+            } else {
+                Map<UUID, Double> scores = rankingEngine.scoreDocuments(queryTerms);
+                if (scores.isEmpty()) {
+                    response = new SearchResponse(query, 0, Collections.emptyList(), page, size, 0);
+                } else {
+                    List<Map.Entry<UUID, Double>> sortedEntries = scores.entrySet().stream()
+                            .sorted(Map.Entry.<UUID, Double>comparingByValue().reversed())
+                            .collect(Collectors.toList());
 
-                DocumentResponse doc = documentService.retrieve(docId);
-                String snippet = generateSnippet(doc.content(), queryTerms);
+                    long totalResults = sortedEntries.size();
+                    int totalPages = (int) Math.ceil((double) totalResults / size);
 
-                double roundedScore = Math.round(score * 100.0) / 100.0;
+                    int startOffset = page * size;
+                    if (startOffset >= totalResults) {
+                        response = new SearchResponse(query, totalResults, Collections.emptyList(), page, size, totalPages);
+                    } else {
+                        int endOffset = Math.min(sortedEntries.size(), startOffset + size);
+                        List<Map.Entry<UUID, Double>> pageEntries = sortedEntries.subList(startOffset, endOffset);
 
-                results.add(new SearchResult(
-                        doc.id(),
-                        doc.title(),
-                        doc.source(),
-                        doc.url(),
-                        roundedScore,
-                        snippet,
-                        doc.indexedAt()
-                ));
+                        List<SearchResult> results = new ArrayList<>();
+                        for (Map.Entry<UUID, Double> entry : pageEntries) {
+                            UUID docId = entry.getKey();
+                            double score = entry.getValue();
+
+                            DocumentResponse doc = documentService.retrieve(docId);
+                            String snippet = generateSnippet(doc.content(), queryTerms);
+
+                            double roundedScore = Math.round(score * 100.0) / 100.0;
+
+                            results.add(new SearchResult(
+                                    doc.id(),
+                                    doc.title(),
+                                    doc.source(),
+                                    doc.url(),
+                                    roundedScore,
+                                    snippet,
+                                    doc.indexedAt()
+                            ));
+                        }
+
+                        response = new SearchResponse(query, totalResults, results, page, size, totalPages);
+                    }
+                }
+                cacheService.put(cacheKey, response, redisCacheProperties.getSearch().getTtlSeconds(), TimeUnit.SECONDS);
             }
-
-            response = new SearchResponse(query, totalResults, results, page, size, totalPages);
         }
 
-        cacheService.put(cacheKey, response, redisCacheProperties.getSearch().getTtlSeconds(), TimeUnit.SECONDS);
+        long durationNs = System.nanoTime() - startTime;
+        long durationMs = java.util.concurrent.TimeUnit.NANOSECONDS.toMillis(durationNs);
+
+        if (analyticsService != null) {
+            analyticsService.recordSearch(query, response.totalResults(), page, size, durationMs, servedFromCache);
+        }
+
         return response;
     }
 
@@ -148,7 +193,7 @@ public class SearchServiceImpl implements SearchService {
                 continue;
             }
             String stemmed = porterStemmerAdapter.stem(cleaned);
-            if (stemmedQueryTerms.contains(stemmed)) {
+            if (stemmed != null && stemmedQueryTerms.contains(stemmed)) {
                 matchIndex = content.indexOf(word);
                 if (matchIndex != -1) {
                     break;

@@ -89,4 +89,22 @@ cache:
     document:
       ttl-seconds: 600
 
+autocomplete:
+  enabled: true
+  default-limit: 10
+  max-limit: 20
+  max-prefix-length: 50
+  popular-query:
+    enabled: true
+    max-size: 1000
+  recent-query:
+    enabled: true
+    max-size: 10
+
+analytics:
+  enabled: true
+  default-limit: 10
+  max-limit: 100
+
+
 
